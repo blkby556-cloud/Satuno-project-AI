@@ -7,8 +7,8 @@ const app = express();
 app.use(bodyParser.json());
 
 const {
-  ANTHROPIC_API_KEY,
-  ANTHROPIC_MODEL = "claude-sonnet-5",
+  GEMINI_API_KEY,
+  GEMINI_MODEL = "gemini-2.5-flash",
   SHARED_SECRET,
   PORT = 3000,
 } = process.env;
@@ -93,31 +93,36 @@ function buildSystemPrompt(mood, firstName) {
 ・───────────・
 ◈ ︙ اللـهم اهدنا فيمن هديت
 
-لا تخرجي عن هذا الهيكل أبدًا، ولا تضيفي شرحًا عن كونك ذكاءً اصطناعيًا من أنثروبيك أو أي تفاصيل تقنية إلا إذا سُئلت مباشرة.`;
+لا تخرجي عن هذا الهيكل أبدًا، ولا تضيفي شرحًا عن كونك ذكاءً اصطناعيًا أو أي تفاصيل تقنية إلا إذا سُئلت مباشرة.`;
 }
 
 async function askSatuno(userMessage, mood, firstName) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+  const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 600,
-      system: buildSystemPrompt(mood, firstName),
-      messages: [{ role: "user", content: userMessage }],
+      systemInstruction: {
+        parts: [{ text: buildSystemPrompt(mood, firstName) }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: userMessage }],
+        },
+      ],
     }),
   });
 
   const data = await response.json();
-  if (!data.content || !data.content[0]) {
-    console.error("رد غير متوقع من Claude:", data);
+  const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!reply) {
+    console.error("رد غير متوقع من Gemini:", JSON.stringify(data));
     return "⌬ ︙ إجـابـة مـسـاعـد ساتونو\n・───────────・\n\nآسفة، حصل خلل بسيط عندي الآن 💫 جربي ترسلي رسالتك مرة ثانية.\n\n・───────────・\n◈ ︙ اللـهم اهدنا فيمن هديت";
   }
-  return data.content[0].text;
+  return reply;
 }
 
 app.post("/manychat-webhook", async (req, res) => {
